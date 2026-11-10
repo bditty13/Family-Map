@@ -537,7 +537,8 @@ function startEditor(m, lat, lng){
   if(mqPhone.matches) sheetSize("mid");
   focusOn(draft.lat, draft.lng);
   $("f-address").addEventListener("input", e => { if(draft) draft.address = e.target.value; $("locText").textContent = e.target.value || "Pinned on the map"; });
-  $("f-photos").addEventListener("change", addPhotos);
+  $("f-photos").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; addPhotoFiles(files); });
+  enablePhotoDrop($("panelView"));
   document.querySelectorAll('input[name="cat"]').forEach(r => r.addEventListener("change", () => draftMarker && draftMarker.setIcon(pinIcon(currentCatColor(),"draft"))));
   $("saveBtn").addEventListener("click", save);
   if(!m && !mqPhone.matches) setTimeout(() => $("f-title")?.focus(), 50);
@@ -547,10 +548,33 @@ async function renderEditPhotos(){
   for(const p of editPhotos) if(!p.url) p.url = await photoURL(p.key);
   if(!$("photoGrid")) return;
   g.innerHTML = editPhotos.map(p => `<div class="ph"><img src="${esc(p.url||"")}" alt=""><button type="button" data-rm="${esc(p.key)}" aria-label="Remove photo">${ICON.close.replace('stroke-width="2"','stroke-width="2.5" width="14" height="14"')}</button></div>`).join("")
-    + `<label class="addphoto" for="f-photos"><span>+ Add<br>photos</span></label>`;
+    + `<label class="addphoto" for="f-photos"><span>+ Add photos<small class="droptip">or drag them here</small></span></label>`;
 }
-async function addPhotos(e){
-  const files = [...e.target.files]; e.target.value = "";
+// Drag photos from the computer onto the editor. Bound once; only active while editing.
+let dropBound = false;
+function enablePhotoDrop(el){
+  if(dropBound) return; dropBound = true;
+  let depth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
+  const setOn = on => { const g = $("photoGrid"); if(g) g.classList.toggle("dropping", on); };
+  el.addEventListener("dragenter", e => { if(mode !== "editing" || !hasFiles(e)) return; e.preventDefault(); depth++; setOn(true); });
+  el.addEventListener("dragover", e => { if(mode !== "editing" || !hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+  el.addEventListener("dragleave", () => { if(mode !== "editing") return; depth = Math.max(0, depth-1); if(!depth) setOn(false); });
+  el.addEventListener("drop", e => {
+    if(mode !== "editing" || !hasFiles(e)) return;
+    e.preventDefault(); depth = 0; setOn(false);
+    const files = [...e.dataTransfer.files];
+    const imgs = files.filter(f => f.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name));
+    if(!imgs.length){ toast("Only photos can be added here."); return; }
+    if(imgs.length < files.length) toast("Some files weren't photos, so they were skipped.");
+    addPhotoFiles(imgs);
+  });
+}
+// Stop a photo dropped on the map or list from opening in place of the app
+["dragover","drop"].forEach(t => window.addEventListener(t, e => { if([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); }));
+async function addPhotoFiles(files){
+  if(!files.length) return;
+  if(files.length > 2) toast(`Adding ${files.length} photos…`);
   let bad = 0;
   for(const f of files){
     try{
