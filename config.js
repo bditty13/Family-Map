@@ -4,6 +4,6 @@
 // in supabase-setup.sql decide who can see and change anything.
 // Leave them empty to keep everything saved only in this browser.
 window.FAMILY_MAP_CONFIG = {
-  supabaseUrl: "",
-  supabaseKey: ""
+  supabaseUrl: "https://jmrpawlxkgzprtnnpnvh.supabase.co",
+  supabaseKey: "sb_publishable_3A4CRG-ZSqE393_RJQFNuQ_RkTbg9h8"
 };
