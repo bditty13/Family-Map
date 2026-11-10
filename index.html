@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Family Story Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: map fills the screen; one side column (desktop) or bottom sheet (phone) holds either the memory list or one memory. */
+:root{
+  --bg:#F5F7F8; --surface:#FFFFFF; --ink:#1B2430; --muted:#5D6877; --line:#E1E6EB;
+  --accent:#1F6F5C; --accent-ink:#FFFFFF; --accent-soft:#E2F0EB; --danger:#B3261E; --danger-soft:#FBE9E7;
+  --shadow:0 8px 28px rgba(20,32,44,.16);
+  --f-display:"Fraunces",Georgia,"Times New Roman",serif;
+  --f-ui:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10151B; --surface:#18202A; --ink:#E7ECF1; --muted:#9BA6B4; --line:#2A3441;
+  --accent:#5CC2A4; --accent-ink:#0C1B16; --accent-soft:#1C3832; --danger:#F2B8B5; --danger-soft:#3A2220;
+  --shadow:0 8px 28px rgba(0,0,0,.45); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10151B; --surface:#18202A; --ink:#E7ECF1; --muted:#9BA6B4; --line:#2A3441;
+  --accent:#5CC2A4; --accent-ink:#0C1B16; --accent-soft:#1C3832; --danger:#F2B8B5; --danger-soft:#3A2220;
+  --shadow:0 8px 28px rgba(0,0,0,.45); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-ui);overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+.app{display:grid;grid-template-columns:400px 1fr;height:100%}
+#map{height:100%;width:100%;background:var(--bg)}
+.mapwrap{position:relative;min-width:0}
+
+/* Side column / sheet */
+.sheet{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;z-index:500;position:relative}
+.view{display:flex;flex-direction:column;min-height:0;flex:1}
+.handle{display:none}
+.head{padding:18px 20px 12px;display:flex;align-items:center;gap:10px}
+.brand{flex:1;min-width:0}
+.brand h1{font:600 22px/1.15 var(--f-display);margin:0;letter-spacing:-.01em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.iconbtn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
+.iconbtn:hover{background:var(--bg)}
+.iconbtn svg{width:18px;height:18px}
+.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:600;background:var(--accent);color:var(--accent-ink);display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--bg)}
+.btn.danger{background:var(--danger);color:var(--surface)}
+.btn.small{padding:7px 11px;font-size:13px}
+.btn svg{width:16px;height:16px}
+
+.tools{padding:0 20px 12px;display:flex;flex-direction:column;gap:10px}
+.field{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px}
+.field:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+.row{display:flex;gap:8px;align-items:center}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 11px 4px 9px;font-size:13px;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.chip .dot{width:9px;height:9px;border-radius:50%}
+.chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);background:var(--bg)}
+.sortrow{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted)}
+.sortrow select{border:0;background:transparent;color:var(--ink);font-weight:600;padding:2px}
+
+.list{flex:1;overflow-y:auto;padding:4px 12px 12px;min-height:0}
+.item{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;border-radius:12px;padding:10px 8px}
+.item:hover,.item.on{background:var(--bg)}
+.item .thumb{width:54px;height:54px;border-radius:10px;background:var(--bg);object-fit:cover;display:grid;place-items:center;overflow:hidden;border:1px solid var(--line)}
+.item .thumb img{width:100%;height:100%;object-fit:cover}
+.item .thumb svg{width:22px;height:22px}
+.item .t{font-weight:600;line-height:1.3}
+.item .m{color:var(--muted);font-size:13px;line-height:1.35;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .txt{min-width:0}
+.item .dist{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.item input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent);vertical-align:2px;margin-left:6px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.empty h3{font:600 18px/1.3 var(--f-display);color:var(--ink);margin:0 0 6px}
+.note{margin:0 20px 10px;padding:10px 12px;border-radius:10px;background:var(--accent-soft);font-size:13px;display:flex;gap:10px;align-items:flex-start}
+.note b{font-weight:600}
+.note .grow{flex:1}
+.note button{border:0;background:transparent;color:var(--accent);font-weight:600;padding:0;font-size:13px}
+.foot{border-top:1px solid var(--line);padding:10px 20px;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center}
+.foot .grow{flex:1}
+.tripbar{border-top:1px solid var(--line);padding:12px 20px;display:flex;gap:8px;align-items:center}
+.tripbar .grow{flex:1;font-size:13px;color:var(--muted)}
+
+/* Memory panel */
+.pscroll{flex:1;overflow-y:auto;min-height:0}
+.ptop{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ptop .grow{flex:1;font-weight:600}
+.hero{position:relative;background:var(--bg);aspect-ratio:4/3;max-width:100%;overflow:hidden}
+.hero img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.thumbs{display:flex;gap:6px;padding:8px 20px 0;overflow-x:auto}
+.thumbs button{border:2px solid transparent;padding:0;border-radius:8px;overflow:hidden;width:56px;height:56px;flex:none;background:var(--bg)}
+.thumbs button[aria-current="true"]{border-color:var(--accent)}
+.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.pbody{padding:18px 20px 24px;display:flex;flex-direction:column;gap:14px}
+.cat{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.cat .dot{width:9px;height:9px;border-radius:50%}
+.pbody h2{font:600 28px/1.15 var(--f-display);margin:0;letter-spacing:-.015em;text-wrap:balance}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px}
+.meta dt{color:var(--muted)}
+.meta dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.story{font-size:16px;line-height:1.65;white-space:pre-wrap;max-width:62ch;margin:0}
+.story.none{color:var(--muted);font-style:italic}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--danger-soft);font-size:14px}
+.confirm span{flex:1;min-width:140px}
+
+/* Editor */
+form.ed{padding:18px 20px 24px;display:flex;flex-direction:column;gap:16px}
+.lbl{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}
+.lbl small{font-weight:400;color:var(--muted)}
+textarea.field{min-height:150px;resize:vertical;line-height:1.55}
+.catpick{display:flex;flex-wrap:wrap;gap:6px}
+.catpick label{position:relative}
+.catpick input{position:absolute;opacity:0;pointer-events:none}
+.catpick input:checked + .chip{border-color:var(--ink);color:var(--ink);background:var(--bg)}
+.catpick input:focus-visible + .chip{outline:2px solid var(--accent);outline-offset:2px}
+.photogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.photogrid .ph{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg)}
+.photogrid .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.photogrid .ph button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;display:grid;place-items:center}
+.addphoto{aspect-ratio:1;border:1.5px dashed var(--line);border-radius:10px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:12px;cursor:pointer;background:transparent;padding:6px}
+.addphoto:hover{border-color:var(--accent);color:var(--accent)}
+.loc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:400}
+.loc .c{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.edfoot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 20px;display:flex;gap:8px;justify-content:flex-end}
+
+/* Map overlays */
+.mapsearch{position:absolute;top:14px;left:14px;right:14px;max-width:420px;z-index:1000}
+.mapsearch .field{background:var(--surface);box-shadow:var(--shadow);border-color:transparent;padding:11px 14px 11px 40px}
+.mapsearch svg.s{position:absolute;left:13px;top:13px;width:18px;height:18px;color:var(--muted)}
+.results{margin-top:6px;background:var(--surface);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.results button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:10px 14px;border-bottom:1px solid var(--line)}
+.results button:last-child{border-bottom:0}
+.results button:hover{background:var(--bg)}
+.results small{display:block;color:var(--muted)}
+.fab{position:absolute;right:14px;bottom:110px;z-index:1000;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.fab .iconbtn{width:44px;height:44px;border:0;box-shadow:var(--shadow);border-radius:12px}
+.fab .iconbtn.on{color:var(--accent)}
+.fab .btn{box-shadow:var(--shadow);padding:12px 16px;border-radius:12px}
+.banner{position:absolute;left:50%;top:72px;transform:translateX(-50%);z-index:1000;background:var(--ink);color:var(--bg);border-radius:12px;padding:10px 10px 10px 16px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);font-weight:500;max-width:calc(100% - 28px)}
+.banner button{border:0;border-radius:8px;padding:6px 10px;background:var(--bg);color:var(--ink);font-weight:600}
+.placing #map{cursor:crosshair}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:2000;box-shadow:var(--shadow);font-size:14px;max-width:calc(100% - 32px)}
+.menu{position:absolute;top:58px;right:20px;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:220px}
+.menu button,.menu label{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:14px}
+.menu button:hover,.menu label:hover{background:var(--bg)}
+.menu small{display:block;color:var(--muted);font-size:12px}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:3000;display:grid;place-items:center;padding:20px}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain}
+.lightbox button{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:14px;border:0;border-radius:10px;padding:8px 12px;background:rgba(255,255,255,.15);color:#fff;font-weight:600}
+
+/* Leaflet theming */
+.leaflet-container{font:inherit;background:var(--bg)}
+.pin{background:none;border:0}
+.pin svg{filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));transition:transform .15s}
+.pin.sel svg{transform:scale(1.25) translateY(-3px)}
+.pin.draft svg{animation:bob 1.2s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-4px)}}
+.me{width:16px;height:16px;border-radius:50%;background:#2F7DD1;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,125,209,.25)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.leaflet-popup-content{margin:12px 14px;font-size:14px}
+.leaflet-popup-content b{display:block;margin-bottom:8px}
+.leaflet-control-attribution{background:color-mix(in srgb,var(--surface) 80%,transparent)!important;color:var(--muted)!important}
+.leaflet-control-attribution a{color:var(--muted)!important}
+.basepick{display:flex;background:var(--surface);border-radius:10px;box-shadow:var(--shadow);padding:3px;gap:2px}
+.basepick button{border:0;background:transparent;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--muted)}
+.basepick button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink)}
+.leaflet-bar a{background:var(--surface)!important;color:var(--ink)!important;border-color:var(--line)!important}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Phone: map full screen, sheet slides up from the bottom */
+@media (max-width:760px){
+  .app{display:block;position:relative}
+  .mapwrap{position:absolute;inset:0}
+  .sheet{position:fixed;left:0;right:0;bottom:0;height:42%;border-right:0;border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.16);transition:height .25s ease;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .sheet.tall{height:86%}
+  .sheet.mid{height:62%}
+  .sheet.low{height:118px}
+  .handle{display:block;border:0;background:transparent;padding:8px 0 0;width:100%}
+  .handle span{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
+  .head{padding-top:8px}
+  .fab{bottom:calc(42% + 14px)}
+  .app.sheet-low .fab{bottom:132px}
+  .app.sheet-tall .fab,.app.sheet-mid .fab{display:none}
+  .menu{right:16px}
+  .sheet{z-index:1001}
+  .leaflet-control-attribution{font-size:10px;max-width:calc(100vw - 190px)}
+  .leaflet-control-zoom{display:none}
+  .leaflet-bottom{bottom:42%;transition:bottom .25s ease}
+  .app.sheet-low .leaflet-bottom{bottom:118px}
+  .app.sheet-mid .leaflet-bottom{bottom:62%}
+  .app.sheet-tall .leaflet-bottom{bottom:86%}
+  .head,.tools,.foot,.tripbar,.pbody,form.ed,.edfoot,.thumbs{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sheet" id="sheet">
+    <button class="handle" id="handle" aria-label="Expand or collapse list"><span></span></button>
+
+    <!-- List view -->
+    <section class="view" id="listView">
+      <div class="head">
+        <div class="brand">
+          <h1>Family Story Map</h1>
+          <p id="count">Loading memories…</p>
+        </div>
+        <button class="iconbtn" id="menuBtn" aria-label="More options" aria-haspopup="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
+        <div class="menu" id="menu" hidden>
+          <button id="tripBtn">Plan a visit<small>Pick places and open a route in Google Maps</small></button>
+          <button id="exportBtn">Back up memories<small>Saves a file with every story and photo</small></button>
+          <label for="importFile">Restore from a backup<small>Adds memories from a backup file</small></label>
+          <button id="clearExamplesBtn" hidden>Remove example memories</button>
+        </div>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <div class="note" id="storageWarn" hidden><div class="grow"><b>This browser isn't saving.</b> Memories will disappear when you close the page. Try a regular (not private) window.</div></div>
+      <div class="note" id="exampleNote" hidden>
+        <div class="grow">The pins in Chicago are <b>examples</b> so you can see how it works.</div>
+        <button id="exampleNoteClear">Remove</button>
+      </div>
+      <div class="tools">
+        <input class="field" id="filter" type="search" placeholder="Search stories, people, places" autocomplete="off">
+        <div class="chips" id="catFilter" role="group" aria-label="Filter by kind of memory"></div>
+        <div class="sortrow">
+          <span id="shown"></span>
+          <label>Sort
+            <select id="sort">
+              <option value="old">Oldest first</option>
+              <option value="new">Newest first</option>
+              <option value="near">Nearest to me</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="list" id="list"></div>
+      <div class="tripbar" id="tripbar" hidden>
+        <div class="grow" id="tripCount">Pick the places to visit</div>
+        <button class="btn ghost small" id="tripCancel">Cancel</button>
+        <button class="btn small" id="tripGo" disabled>Open route</button>
+      </div>
+      <div class="foot" id="foot"><span class="grow">Saved in this browser on this device.</span><button class="btn ghost small" id="footBackup">Back up</button></div>
+    </section>
+
+    <!-- Memory view / editor -->
+    <section class="view" id="panelView" hidden></section>
+  </aside>
+
+  <main class="mapwrap">
+    <div id="map" role="application" aria-label="Map of family memories"></div>
+    <div class="mapsearch">
+      <svg class="s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input class="field" id="search" type="search" placeholder="Find an address or town" autocomplete="off">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <div class="banner" id="banner" hidden><span id="bannerText">Tap the map where it happened</span><button id="bannerCancel">Cancel</button></div>
+    <div class="fab">
+      <button class="iconbtn" id="locateBtn" aria-label="Show where I am">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+      <button class="iconbtn" id="fitBtn" aria-label="Show all memories">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button class="btn" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add memory</button>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div class="lightbox" id="lightbox" hidden><img id="lightImg" alt=""><button id="lightClose">Close</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- Constants ---------- */
+const CATS = {
+  home:        {label:"Home",          color:"#2F7DD1"},
+  love:        {label:"Love",          color:"#D6457A"},
+  family:      {label:"Family",        color:"#8659D4"},
+  milestone:   {label:"School & work", color:"#D47A12"},
+  celebration: {label:"Celebration",   color:"#C0392B"},
+  travel:      {label:"Travel",        color:"#12988F"},
+  other:       {label:"Other",         color:"#6B7480"}
+};
+const EXAMPLES = [
+  {title:"Where we had our first date", when:"June 14, 1996", category:"love", people:"Mom, Dad",
+   story:"Dad was twenty minutes late because the El broke down. Mom almost left. They split a plate of fries, walked the pier until it closed, and he asked if he could call her the next day.",
+   address:"Navy Pier, Chicago, IL", lat:41.8917, lng:-87.6086},
+  {title:"First apartment together", when:"Fall 1998", category:"home", people:"Mom, Dad",
+   story:"A third-floor walk-up with a radiator that clanked all winter. They painted the kitchen yellow and hosted their first Thanksgiving here for eleven people around a card table.",
+   address:"Lincoln Park, Chicago, IL", lat:41.9214, lng:-87.6513},
+  {title:"Grandpa Joe's barbershop", when:"1962 to 1989", category:"milestone", people:"Grandpa Joe",
+   story:"Grandpa cut hair here for 27 years. Kids got a lollipop from the jar by the register, and the radio was always on the Cubs game.",
+   address:"Pilsen, Chicago, IL", lat:41.8566, lng:-87.6560},
+  {title:"Wedding reception", when:"May 2001", category:"celebration", people:"Whole family",
+   story:"It rained all morning and cleared up an hour before the ceremony. Aunt Rosa led the first dance line and nobody could get her to stop.",
+   address:"Garfield Park Conservatory, Chicago, IL", lat:41.8863, lng:-87.7173}
+];
+const mqPhone = window.matchMedia("(max-width:760px)");
+const mqDark = window.matchMedia("(prefers-color-scheme:dark)");
+const $ = id => document.getElementById(id);
+
+/* ---------- Storage (IndexedDB, in-memory fallback) ---------- */
+let idb = null;
+const memStore = {memories:new Map(), photos:new Map()};
+function openDB(){
+  return new Promise(res => {
+    try{
+      const r = indexedDB.open("family-story-map", 1);
+      r.onupgradeneeded = () => { const d = r.result; d.createObjectStore("memories",{keyPath:"id"}); d.createObjectStore("photos",{keyPath:"id"}); };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+      r.onblocked = () => res(null);
+    }catch(e){ res(null); }
+  });
+}
+const wrap = q => new Promise((res,rej) => { q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+const store = (s,mode) => idb.transaction(s, mode||"readonly").objectStore(s);
+async function getAll(s){ return idb ? wrap(store(s).getAll()) : [...memStore[s].values()]; }
+async function getOne(s,id){ return idb ? wrap(store(s).get(id)) : memStore[s].get(id); }
+async function put(s,o){ if(idb) return wrap(store(s,"readwrite").put(o)); memStore[s].set(o.id,o); }
+async function del(s,id){ if(idb) return wrap(store(s,"readwrite").delete(id)); memStore[s].delete(id); }
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+/* ---------- Helpers ---------- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function yearOf(when){ const m = String(when||"").match(/\b(1[5-9]\d\d|20\d\d)\b/); return m ? +m[1] : null; }
+function miles(a,b){
+  const R = 3958.8, r = x => x*Math.PI/180;
+  const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function fmtMiles(d){ return d < 0.1 ? "Right here" : d < 10 ? d.toFixed(1)+" mi" : Math.round(d).toLocaleString()+" mi"; }
+let toastT;
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
+function catOf(m){ return CATS[m.category] || CATS.other; }
+const ICON = {
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+};
+
+/* ---------- Photos ---------- */
+const urlCache = new Map();
+async function photoURL(id){
+  if(urlCache.has(id)) return urlCache.get(id);
+  const p = await getOne("photos", id);
+  if(!p) return null;
+  const u = URL.createObjectURL(p.blob);
+  urlCache.set(id, u);
+  return u;
+}
+function loadImage(file){
+  return new Promise((res,rej) => { const u = URL.createObjectURL(file); const i = new Image(); i.onload = () => { res(i); URL.revokeObjectURL(u); }; i.onerror = () => { rej(new Error("unreadable")); URL.revokeObjectURL(u); }; i.src = u; });
+}
+async function shrink(file, max=1600){
+  const img = await loadImage(file);
+  const s = Math.min(1, max/Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth*s); c.height = Math.round(img.naturalHeight*s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return new Promise(res => c.toBlob(b => res(b || file), "image/jpeg", 0.85));
+}
+
+/* ---------- Geocoding (Photon, OpenStreetMap data) ---------- */
+function fmtPlace(p){
+  const line1 = [p.housenumber, p.street].filter(Boolean).join(" ") || p.name || "";
+  const line2 = [p.name && p.name !== line1 ? p.name : null, p.city || p.town || p.village || p.county, p.state, p.country === "United States" ? null : p.country].filter(Boolean);
+  const parts = [line1, ...line2].filter(Boolean);
+  return [...new Set(parts)].join(", ");
+}
+async function fetchJSON(url, ms=6000){
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try{ const r = await fetch(url, {signal:ctl.signal}); if(!r.ok) throw new Error(r.status); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+async function reverseGeocode(lat,lng){
+  try{
+    const j = await fetchJSON(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en`);
+    const f = j.features && j.features[0];
+    return f ? fmtPlace(f.properties) : "";
+  }catch(e){ return ""; }
+}
+
+/* ---------- State ---------- */
+let memories = [];
+let selectedId = null;
+let mode = "browse";          // browse | placing | editing
+let draft = null;             // {lat,lng,address}
+let editing = null;           // memory being edited or null for new
+let editPhotos = [];          // [{id,url,blob,isNew}]
+let removedPhotos = [];
+let catFilter = new Set();
+let me = null;                // {lat,lng}
+let tripMode = false;
+let tripPick = new Set();
+
+/* ---------- Map ---------- */
+const map = L.map("map", {zoomControl:false, worldCopyJump:true}).setView([39.5,-98.35], 4);
+L.control.zoom({position:"bottomright"}).addTo(map);
+// Map backgrounds that need no API key. If one fails to load, the next one is tried.
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+const BASES = {
+  streets: {label:"Streets", url:ESRI+"World_Street_Map/MapServer/tile/{z}/{y}/{x}", opts:{maxZoom:19, attribution:"Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors"}},
+  satellite: {label:"Satellite", url:ESRI+"World_Imagery/MapServer/tile/{z}/{y}/{x}", opts:{maxZoom:19, attribution:"Tiles &copy; Esri, Maxar, Earthstar Geographics"}},
+  osm: {label:"OpenStreetMap", url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png", opts:{maxZoom:19, referrerPolicy:"strict-origin-when-cross-origin", attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}}
+};
+const FALLBACK = {streets:"osm", osm:"satellite", satellite:null};
+let tiles = null, baseKey = null;
+function setBase(key, auto){
+  if(!BASES[key]) key = "streets";
+  if(tiles) map.removeLayer(tiles);
+  baseKey = key;
+  const b = BASES[key];
+  tiles = L.tileLayer(b.url, b.opts).addTo(map);
+  let ok = 0, bad = 0;
+  tiles.on("tileload", () => ok++);
+  tiles.on("tileerror", () => {
+    bad++;
+    if(bad === 6 && ok === 0 && tiles && baseKey === key){
+      const next = FALLBACK[key];
+      if(next){ setBase(next, true); toast(`The ${b.label} map isn't loading, so switched to ${BASES[next].label}.`); }
+      else toast("The map background isn't loading. Check your internet connection.");
+    }
+  });
+  if(!auto) lsSet("fsm-base", key);
+  document.querySelectorAll("[data-base]").forEach(el => el.setAttribute("aria-pressed", el.dataset.base === key));
+}
+const BaseControl = L.Control.extend({
+  options:{position:"bottomleft"},
+  onAdd(){
+    const d = L.DomUtil.create("div","basepick");
+    d.innerHTML = ["streets","satellite"].map(k => `<button type="button" data-base="${k}">${BASES[k].label}</button>`).join("");
+    L.DomEvent.disableClickPropagation(d);
+    d.addEventListener("click", e => { const b = e.target.closest("[data-base]"); if(b) setBase(b.dataset.base); });
+    return d;
+  }
+});
+map.addControl(new BaseControl());
+setBase(lsGet("fsm-base") || "streets", true);
+
+function pinIcon(color, cls){
+  return L.divIcon({className:"pin "+(cls||""), iconSize:[30,40], iconAnchor:[15,39], popupAnchor:[0,-36],
+    html:`<svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 38.5S28 25.4 28 15A13 13 0 0 0 2 15c0 10.4 13 23.5 13 23.5z" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="15" cy="15" r="5" fill="#fff"/></svg>`});
+}
+const markers = new Map();
+const layer = L.layerGroup().addTo(map);
+let draftMarker = null, searchMarker = null, meMarker = null;
+
+function drawMarkers(){
+  layer.clearLayers(); markers.clear();
+  visible().forEach(m => {
+    const mk = L.marker([m.lat,m.lng], {icon:pinIcon(catOf(m).color, m.id===selectedId?"sel":""), title:m.title, riseOnHover:true, keyboard:true});
+    mk.on("click", () => { if(mode==="browse") openMemory(m.id); });
+    mk.addTo(layer); markers.set(m.id, mk);
+  });
+}
+function fitAll(animate=true){
+  const pts = visible().map(m => [m.lat,m.lng]);
+  if(me) pts.push([me.lat,me.lng]);
+  if(!pts.length) return;
+  if(pts.length === 1) return map.setView(pts[0], 14, {animate});
+  const pad = mqPhone.matches ? {paddingTopLeft:[30,80], paddingBottomRight:[30, window.innerHeight*0.45]} : {padding:[60,60]};
+  map.fitBounds(pts, {...pad, maxZoom:15, animate});
+}
+// Center a point in the part of the map the sheet doesn't cover
+function focusOn(lat, lng, zoom){
+  zoom = zoom ?? Math.max(map.getZoom(), 15);
+  let pt = map.project([lat,lng], zoom);
+  if(mqPhone.matches){
+    const frac = $("sheet").classList.contains("tall") ? .86 : $("sheet").classList.contains("mid") ? .62 : .42;
+    pt = pt.add([0, window.innerHeight*frac/2]);
+  }
+  map.flyTo(map.unproject(pt, zoom), zoom, {duration:.6});
+}
+
+map.on("click", e => {
+  if(mode === "placing") startEditor(null, e.latlng.lat, e.latlng.lng);
+  else if(mode === "editing") moveDraft(e.latlng.lat, e.latlng.lng);
+});
+
+/* ---------- Sheet sizing on phones ---------- */
+function sheetSize(size){
+  const s = $("sheet");
+  s.classList.remove("tall","mid","low");
+  if(size) s.classList.add(size);
+  const app = $("app");
+  app.classList.remove("sheet-tall","sheet-mid","sheet-low");
+  if(size) app.classList.add("sheet-"+size);
+}
+$("handle").addEventListener("click", () => {
+  const s = $("sheet");
+  if(!$("panelView").hidden){ sheetSize(s.classList.contains("tall") ? "mid" : "tall"); return; }
+  sheetSize(s.classList.contains("tall") ? "low" : s.classList.contains("low") ? null : "tall");
+});
+
+/* ---------- Filtering / list ---------- */
+function visible(){
+  const q = $("filter").value.trim().toLowerCase();
+  return memories.filter(m =>
+    (!catFilter.size || catFilter.has(m.category)) &&
+    (!q || [m.title,m.when,m.people,m.story,m.address].join(" ").toLowerCase().includes(q)));
+}
+function sorted(list){
+  const how = $("sort").value;
+  const arr = [...list];
+  if(how === "near" && me) return arr.sort((a,b) => miles(me,a) - miles(me,b));
+  const dir = how === "new" ? -1 : 1;
+  return arr.sort((a,b) => {
+    const ya = yearOf(a.when), yb = yearOf(b.when);
+    if(ya == null && yb == null) return a.created - b.created;
+    if(ya == null) return 1; if(yb == null) return -1;
+    return (ya - yb)*dir || (a.created - b.created)*dir;
+  });
+}
+function renderCats(){
+  const used = new Set(memories.map(m => m.category));
+  $("catFilter").innerHTML = Object.entries(CATS).filter(([k]) => used.has(k)).map(([k,c]) =>
+    `<button class="chip" data-cat="${k}" aria-pressed="${catFilter.has(k)}"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}</button>`).join("");
+}
+$("catFilter").addEventListener("click", e => {
+  const b = e.target.closest("[data-cat]"); if(!b) return;
+  const k = b.dataset.cat; catFilter.has(k) ? catFilter.delete(k) : catFilter.add(k);
+  renderAll();
+});
+$("filter").addEventListener("input", () => renderAll());
+$("sort").addEventListener("change", async () => {
+  if($("sort").value === "near" && !me){ const ok = await locate(false); if(!ok) $("sort").value = "old"; }
+  renderList();
+});
+
+function renderList(){
+  const vis = sorted(visible());
+  const n = memories.length;
+  $("count").textContent = n ? `${n} ${n===1?"memory":"memories"} on the map` : "No memories yet";
+  $("shown").textContent = vis.length === n ? "" : `Showing ${vis.length} of ${n}`;
+  const hasEx = memories.some(m => m.example);
+  $("exampleNote").hidden = !hasEx;
+  $("clearExamplesBtn").hidden = !hasEx;
+  const list = $("list");
+  if(!n){
+    list.innerHTML = `<div class="empty"><h3>Start with one place</h3><p>Tap <b>Add memory</b>, then tap the map where it happened, or search an address first. Add the story and a photo or two.</p></div>`;
+    return;
+  }
+  if(!vis.length){ list.innerHTML = `<div class="empty"><p>No memories match that search.</p></div>`; return; }
+  list.innerHTML = vis.map(m => {
+    const c = catOf(m);
+    const d = me ? `<span class="dist">${fmtMiles(miles(me,m))}</span>` : "<span></span>";
+    const right = tripMode ? `<input type="checkbox" aria-label="Visit ${esc(m.title)}" ${tripPick.has(m.id)?"checked":""}>` : d;
+    return `<button class="item ${m.id===selectedId?"on":""}" data-id="${m.id}">
+      <span class="thumb" data-photo="${m.photos[0]||""}" style="color:${c.color}">${ICON.pin}</span>
+      <span class="txt"><span class="t">${esc(m.title)}</span>${m.example?'<span class="badge">Example</span>':""}
+        <span class="m">${esc([m.when, m.address].filter(Boolean).join(" · ") || c.label)}</span></span>
+      ${right}</button>`;
+  }).join("");
+  list.querySelectorAll("[data-photo]").forEach(async el => {
+    const id = el.dataset.photo; if(!id) return;
+    const u = await photoURL(id); if(u) el.innerHTML = `<img src="${u}" alt="">`;
+  });
+}
+$("list").addEventListener("click", e => {
+  const it = e.target.closest(".item"); if(!it) return;
+  const id = it.dataset.id;
+  if(tripMode){
+    tripPick.has(id) ? tripPick.delete(id) : tripPick.add(id);
+    const cb = it.querySelector("input"); if(cb) cb.checked = tripPick.has(id);
+    updateTrip(); return;
+  }
+  openMemory(id);
+});
+function renderAll(){ renderCats(); renderList(); drawMarkers(); }
+
+/* ---------- Memory view ---------- */
+function showPanel(html){
+  $("listView").hidden = true;
+  const p = $("panelView"); p.hidden = false; p.innerHTML = html;
+  p.querySelector(".pscroll")?.scrollTo(0,0);
+}
+function closePanel(){
+  $("panelView").hidden = true; $("panelView").innerHTML = "";
+  $("listView").hidden = false;
+  selectedId = null; mode = "browse"; editing = null;
+  clearDraft(); setBanner(null);
+  sheetSize(null);
+  renderAll();
+}
+async function openMemory(id){
+  const m = memories.find(x => x.id === id); if(!m) return;
+  mode = "browse"; clearDraft(); setBanner(null);
+  selectedId = id; drawMarkers();
+  const c = catOf(m);
+  const dist = me ? `<dt>Distance</dt><dd>${fmtMiles(miles(me,m))} from you</dd>` : "";
+  showPanel(`
+    <div class="ptop"><button class="iconbtn" data-act="back" aria-label="Back to all memories">${ICON.back}</button><span class="grow">All memories</span>
+      <button class="btn ghost small" data-act="edit">Edit</button></div>
+    <div class="pscroll">
+      ${m.photos.length ? `<div class="hero"><img id="heroImg" alt="Photo for ${esc(m.title)}"></div>
+        ${m.photos.length > 1 ? `<div class="thumbs">${m.photos.map((p,i) => `<button data-thumb="${p}" aria-label="Photo ${i+1}" aria-current="${i===0}"><img alt=""></button>`).join("")}</div>` : ""}` : ""}
+      <div class="pbody">
+        <span class="cat"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}${m.example?'<span class="badge">Example</span>':""}</span>
+        <h2>${esc(m.title)}</h2>
+        <dl class="meta">
+          ${m.when ? `<dt>When</dt><dd>${esc(m.when)}</dd>` : ""}
+          ${m.people ? `<dt>Who</dt><dd>${esc(m.people)}</dd>` : ""}
+          <dt>Where</dt><dd>${esc(m.address || `${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}`)}</dd>
+          ${dist}
+        </dl>
+        <p class="story ${m.story?"":"none"}">${esc(m.story || "No story written yet. Tap Edit to add one.")}</p>
+        <div class="actions">
+          <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}" target="_blank" rel="noopener">Directions</a>
+          <button class="btn ghost" data-act="del">Delete</button>
+        </div>
+        <div class="confirm" id="confirmDel" hidden><span>Delete this memory and its photos? This can't be undone.</span>
+          <button class="btn ghost small" data-act="keep">Keep it</button><button class="btn danger small" data-act="really-del">Delete</button></div>
+      </div>
+    </div>`);
+  if(mqPhone.matches) sheetSize("mid");
+  focusOn(m.lat, m.lng);
+  if(m.photos.length){
+    const first = await photoURL(m.photos[0]);
+    const h = $("heroImg"); if(h && first) h.src = first;
+    document.querySelectorAll("[data-thumb]").forEach(async b => { const u = await photoURL(b.dataset.thumb); if(u) b.querySelector("img").src = u; });
+  }
+}
+$("panelView").addEventListener("click", async e => {
+  const t = e.target.closest("[data-act],[data-thumb],#heroImg,[data-rm]");
+  if(!t) return;
+  if(t.id === "heroImg"){ $("lightImg").src = t.src; $("lightbox").hidden = false; return; }
+  if(t.dataset.thumb){
+    const u = await photoURL(t.dataset.thumb); if(u) $("heroImg").src = u;
+    document.querySelectorAll("[data-thumb]").forEach(b => b.setAttribute("aria-current", b === t));
+    return;
+  }
+  if(t.dataset.rm){
+    const i = editPhotos.findIndex(p => p.id === t.dataset.rm);
+    if(i > -1){ const [p] = editPhotos.splice(i,1); if(!p.isNew) removedPhotos.push(p.id); }
+    renderEditPhotos(); return;
+  }
+  const act = t.dataset.act;
+  const m = memories.find(x => x.id === selectedId);
+  if(act === "back" || act === "cancel"){
+    if(act === "cancel" && editing){ openMemory(editing.id); return; }
+    closePanel(); return;
+  }
+  if(act === "edit" && m) startEditor(m);
+  if(act === "del") $("confirmDel").hidden = false;
+  if(act === "keep") $("confirmDel").hidden = true;
+  if(act === "really-del" && m){
+    for(const p of m.photos){ await del("photos", p); urlCache.delete(p); }
+    await del("memories", m.id);
+    memories = memories.filter(x => x.id !== m.id);
+    closePanel(); toast("Memory deleted");
+  }
+});
+
+/* ---------- Adding / editing ---------- */
+function setBanner(text){
+  $("banner").hidden = !text; if(text) $("bannerText").textContent = text;
+  $("app").classList.toggle("placing", mode === "placing");
+}
+$("addBtn").addEventListener("click", () => {
+  if(tripMode) endTrip();
+  mode = "placing"; setBanner("Tap the map where it happened, or search an address above");
+  if(mqPhone.matches) sheetSize("low");
+});
+$("bannerCancel").addEventListener("click", () => { mode = "browse"; setBanner(null); sheetSize(null); });
+
+function clearDraft(){ if(draftMarker){ map.removeLayer(draftMarker); draftMarker = null; } draft = null; }
+function moveDraft(lat, lng, address){
+  draft = {lat, lng, address: address ?? ""};
+  if(!draftMarker){
+    draftMarker = L.marker([lat,lng], {icon:pinIcon(currentCatColor(), "draft"), draggable:true, zIndexOffset:1000}).addTo(map);
+    draftMarker.on("dragend", () => { const p = draftMarker.getLatLng(); moveDraft(p.lat, p.lng); });
+  } else draftMarker.setLatLng([lat,lng]);
+  renderLoc();
+  if(address == null){
+    $("locText") && ($("locText").textContent = "Looking up the address…");
+    reverseGeocode(lat,lng).then(a => { if(draft && draft.lat === lat && draft.lng === lng){ draft.address = a; renderLoc(); } });
+  }
+}
+function currentCatColor(){
+  const r = document.querySelector('input[name="cat"]:checked');
+  return (CATS[r ? r.value : "home"] || CATS.other).color;
+}
+function renderLoc(){
+  const el = $("locText"); if(!el || !draft) return;
+  el.textContent = draft.address || "Pinned on the map";
+  $("locCoords").textContent = `${draft.lat.toFixed(5)}, ${draft.lng.toFixed(5)}`;
+  const inp = $("f-address"); if(inp && document.activeElement !== inp) inp.value = draft.address || "";
+}
+
+function startEditor(m, lat, lng){
+  editing = m || null;
+  mode = "editing"; setBanner(null);
+  selectedId = m ? m.id : null;
+  removedPhotos = [];
+  editPhotos = m ? m.photos.map(id => ({id, url:null, isNew:false})) : [];
+  const catKey = m ? m.category : "home";
+  showPanel(`
+    <div class="ptop"><button class="iconbtn" data-act="cancel" aria-label="Cancel">${ICON.close}</button><span class="grow">${m ? "Edit memory" : "New memory"}</span></div>
+    <div class="pscroll">
+      <form class="ed" id="edForm" novalidate>
+        <label class="lbl" for="f-title">What happened here?
+          <input class="field" id="f-title" required maxlength="120" placeholder="First home, first date, Grandma's farm…" value="${esc(m?.title)}"></label>
+        <div class="lbl">Kind of memory
+          <div class="catpick">${Object.entries(CATS).map(([k,c]) =>
+            `<label><input type="radio" name="cat" value="${k}" ${k===catKey?"checked":""}><span class="chip"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}</span></label>`).join("")}</div></div>
+        <label class="lbl" for="f-when">When <small>A date, a season, or a span, like "Summer 1987" or "1962 to 1989"</small>
+          <input class="field" id="f-when" maxlength="80" value="${esc(m?.when)}"></label>
+        <label class="lbl" for="f-people">Who was there
+          <input class="field" id="f-people" maxlength="200" placeholder="Mom, Dad, Uncle Ray" value="${esc(m?.people)}"></label>
+        <label class="lbl" for="f-story">The story
+          <textarea class="field" id="f-story" placeholder="Tell it the way you'd tell it at the dinner table.">${esc(m?.story)}</textarea></label>
+        <div class="lbl">Photos
+          <div class="photogrid" id="photoGrid"></div>
+          <input type="file" id="f-photos" accept="image/*" multiple hidden></div>
+        <div class="lbl">Where
+          <div class="loc"><div id="locText">Pinned on the map</div><div class="c" id="locCoords"></div></div>
+          <small>Drag the pin or tap the map to move it. You can also search an address in the box on the map.</small>
+          <label class="lbl" for="f-address" style="font-weight:400">Place name shown on this memory <small>Optional. Change it to something like "Grandma's house on Elm St"</small>
+            <input class="field" id="f-address" maxlength="200"></label>
+        </div>
+      </form>
+    </div>
+    <div class="edfoot"><button class="btn ghost" data-act="cancel" type="button">Cancel</button><button class="btn" id="saveBtn" type="button">${m ? "Save changes" : "Save memory"}</button></div>`);
+  clearDraft();
+  if(m) moveDraft(m.lat, m.lng, m.address); else moveDraft(lat, lng);
+  if(m && markers.get(m.id)) layer.removeLayer(markers.get(m.id));
+  renderEditPhotos();
+  if(mqPhone.matches) sheetSize("mid");
+  focusOn(draft.lat, draft.lng);
+  $("f-address").addEventListener("input", e => { if(draft) draft.address = e.target.value; $("locText").textContent = e.target.value || "Pinned on the map"; });
+  $("f-photos").addEventListener("change", addPhotos);
+  document.querySelectorAll('input[name="cat"]').forEach(r => r.addEventListener("change", () => draftMarker && draftMarker.setIcon(pinIcon(currentCatColor(),"draft"))));
+  $("saveBtn").addEventListener("click", save);
+  if(!m && !mqPhone.matches) setTimeout(() => $("f-title")?.focus(), 50);
+}
+async function renderEditPhotos(){
+  const g = $("photoGrid"); if(!g) return;
+  for(const p of editPhotos) if(!p.url) p.url = await photoURL(p.id);
+  g.innerHTML = editPhotos.map(p => `<div class="ph"><img src="${p.url||""}" alt=""><button type="button" data-rm="${p.id}" aria-label="Remove photo">${ICON.close.replace('stroke-width="2"','stroke-width="2.5" width="14" height="14"')}</button></div>`).join("")
+    + `<label class="addphoto" for="f-photos"><span>+ Add<br>photos</span></label>`;
+}
+async function addPhotos(e){
+  const files = [...e.target.files]; e.target.value = "";
+  let bad = 0;
+  for(const f of files){
+    try{
+      const blob = await shrink(f);
+      const id = uid();
+      editPhotos.push({id, blob, url:URL.createObjectURL(blob), isNew:true});
+    }catch(err){ bad++; }
+  }
+  if(bad) toast(bad === 1 ? "One photo couldn't be read. Try a JPG or PNG." : `${bad} photos couldn't be read. Try JPG or PNG.`);
+  renderEditPhotos();
+}
+async function save(){
+  const title = $("f-title").value.trim();
+  if(!title){ $("f-title").focus(); toast("Give this memory a title first."); return; }
+  const btn = $("saveBtn"); btn.disabled = true; btn.textContent = "Saving…";
+  try{
+    for(const p of editPhotos) if(p.isNew){ await put("photos", {id:p.id, blob:p.blob}); urlCache.set(p.id, p.url); }
+    for(const id of removedPhotos){ await del("photos", id); urlCache.delete(id); }
+    const now = Date.now();
+    const m = {
+      id: editing ? editing.id : uid(),
+      title,
+      when: $("f-when").value.trim(),
+      people: $("f-people").value.trim(),
+      story: $("f-story").value.trim(),
+      category: (document.querySelector('input[name="cat"]:checked')||{}).value || "other",
+      address: (draft.address||"").trim(),
+      lat: draft.lat, lng: draft.lng,
+      photos: editPhotos.map(p => p.id),
+      example: false,
+      created: editing ? editing.created : now,
+      updated: now
+    };
+    await put("memories", m);
+    memories = memories.filter(x => x.id !== m.id).concat(m);
+    editing = null; clearDraft();
+    renderAll(); openMemory(m.id);
+    toast("Memory saved");
+  }catch(err){
+    btn.disabled = false; btn.textContent = "Save memory";
+    toast("Couldn't save. Your device may be out of storage space.");
+  }
+}
+
+/* ---------- Address search ---------- */
+let searchT, searchSeq = 0;
+$("search").addEventListener("input", () => {
+  clearTimeout(searchT);
+  const q = $("search").value.trim();
+  if(q.length < 3){ $("results").hidden = true; return; }
+  searchT = setTimeout(async () => {
+    const seq = ++searchSeq;
+    const c = map.getCenter();
+    try{
+      const j = await fetchJSON(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5&lang=en&lat=${c.lat}&lon=${c.lng}`);
+      if(seq !== searchSeq) return;
+      const feats = (j.features||[]);
+      $("results").innerHTML = feats.length ? feats.map((f,i) => {
+        const p = f.properties; const label = fmtPlace(p);
+        return `<button data-i="${i}">${esc(label.split(", ")[0])}<small>${esc(label.split(", ").slice(1).join(", "))}</small></button>`;
+      }).join("") : `<button disabled>No places found</button>`;
+      $("results").hidden = false;
+      $("results").onclick = ev => {
+        const b = ev.target.closest("[data-i]"); if(!b) return;
+        const f = feats[+b.dataset.i]; const [lng,lat] = f.geometry.coordinates;
+        pickPlace(lat, lng, fmtPlace(f.properties));
+      };
+    }catch(err){ if(seq === searchSeq){ $("results").innerHTML = `<button disabled>Search isn't reachable right now. Check your connection.</button>`; $("results").hidden = false; } }
+  }, 350);
+});
+$("search").addEventListener("keydown", e => { if(e.key === "Enter"){ const b = $("results").querySelector("[data-i]"); if(b) b.click(); } if(e.key === "Escape") $("results").hidden = true; });
+function pickPlace(lat, lng, label){
+  $("results").hidden = true; $("search").value = ""; $("search").blur();
+  if(mode === "placing"){ startEditor(null, lat, lng); moveDraft(lat, lng, label); return; }
+  if(mode === "editing"){ moveDraft(lat, lng, label); focusOn(lat, lng, 17); return; }
+  if(searchMarker) map.removeLayer(searchMarker);
+  const div = document.createElement("div");
+  div.innerHTML = `<b>${esc(label)}</b><button class="btn small">Add a memory here</button>`;
+  div.querySelector("button").addEventListener("click", () => { map.removeLayer(searchMarker); searchMarker = null; startEditor(null, lat, lng); moveDraft(lat, lng, label); });
+  searchMarker = L.marker([lat,lng], {icon:pinIcon("#1B2430")}).addTo(map).bindPopup(div).openPopup();
+  map.setView([lat,lng], 17);
+}
+
+/* ---------- My location ---------- */
+function locate(fly=true){
+  return new Promise(res => {
+    if(!navigator.geolocation){ toast("This browser can't share your location."); return res(false); }
+    $("locateBtn").classList.add("on");
+    navigator.geolocation.getCurrentPosition(pos => {
+      me = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+      if(meMarker) meMarker.setLatLng([me.lat,me.lng]);
+      else meMarker = L.marker([me.lat,me.lng], {icon:L.divIcon({className:"", html:'<div class="me"></div>', iconSize:[16,16], iconAnchor:[8,8]}), interactive:false}).addTo(map);
+      if(fly) map.setView([me.lat,me.lng], 14);
+      const near = memories.filter(m => miles(me,m) < 0.25);
+      if(near.length) toast(near.length === 1 ? `You're near "${near[0].title}"` : `You're near ${near.length} memories`);
+      renderList(); res(true);
+    }, () => { $("locateBtn").classList.remove("on"); toast("Location is off. Allow location for this page in your browser settings."); res(false); },
+    {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
+  });
+}
+$("locateBtn").addEventListener("click", () => locate(true));
+$("fitBtn").addEventListener("click", () => fitAll());
+
+/* ---------- Plan a visit ---------- */
+function startTrip(){
+  tripMode = true; tripPick.clear();
+  $("tripbar").hidden = false; $("foot").hidden = true;
+  if(mqPhone.matches) sheetSize("tall");
+  updateTrip(); renderList();
+}
+function endTrip(){ tripMode = false; tripPick.clear(); $("tripbar").hidden = true; $("foot").hidden = false; renderList(); }
+function updateTrip(){
+  const n = tripPick.size;
+  $("tripCount").textContent = n ? `${n} ${n===1?"stop":"stops"} picked` : "Pick the places to visit";
+  $("tripGo").disabled = n === 0;
+}
+$("tripBtn").addEventListener("click", () => { $("menu").hidden = true; startTrip(); });
+$("tripCancel").addEventListener("click", endTrip);
+$("tripGo").addEventListener("click", () => {
+  // Order stops by always going to the closest unvisited one next
+  let left = memories.filter(m => tripPick.has(m.id));
+  const order = [];
+  let cur = me || left[0];
+  while(left.length){
+    left.sort((a,b) => miles(cur,a) - miles(cur,b));
+    cur = left.shift(); order.push(cur);
+  }
+  const stops = order.slice(0, 10).map(m => `${m.lat},${m.lng}`);
+  const url = "https://www.google.com/maps/dir/" + (me ? "My+Location/" : "") + stops.join("/");
+  window.open(url, "_blank", "noopener");
+  if(order.length > 10) toast("Google Maps takes up to 10 stops, so the first 10 were used.");
+});
+
+/* ---------- Menu, backup, restore ---------- */
+$("menuBtn").addEventListener("click", e => { e.stopPropagation(); $("menu").hidden = !$("menu").hidden; });
+document.addEventListener("click", e => { if(!e.target.closest("#menu")) $("menu").hidden = true; if(!e.target.closest(".mapsearch")) $("results").hidden = true; });
+const blobToDataURL = b => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+async function backup(){
+  $("menu").hidden = true;
+  toast("Preparing your backup…");
+  const photos = [];
+  for(const p of await getAll("photos")) photos.push({id:p.id, data: await blobToDataURL(p.blob)});
+  const data = {app:"family-story-map", version:1, exported:new Date().toISOString(), memories: memories.filter(m => !m.example), photos};
+  const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `family-map-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast("Backup saved to your downloads");
+}
+$("exportBtn").addEventListener("click", backup);
+$("footBackup").addEventListener("click", backup);
+$("importFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; $("menu").hidden = true;
+  if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    if(data.app !== "family-story-map" || !Array.isArray(data.memories)) throw new Error("bad");
+    for(const p of data.photos || []){ const blob = await (await fetch(p.data)).blob(); await put("photos", {id:p.id, blob}); urlCache.delete(p.id); }
+    for(const m of data.memories) await put("memories", m);
+    memories = await getAll("memories");
+    renderAll(); fitAll();
+    toast(`Restored ${data.memories.length} memories`);
+  }catch(err){ toast("That file isn't a Family Story Map backup."); }
+});
+async function clearExamples(){
+  for(const m of memories.filter(m => m.example)) await del("memories", m.id);
+  memories = memories.filter(m => !m.example);
+  $("menu").hidden = true;
+  renderAll(); fitAll(); toast("Examples removed");
+}
+$("clearExamplesBtn").addEventListener("click", clearExamples);
+$("exampleNoteClear").addEventListener("click", clearExamples);
+
+/* ---------- Lightbox / keys ---------- */
+$("lightClose").addEventListener("click", () => $("lightbox").hidden = true);
+$("lightbox").addEventListener("click", e => { if(e.target.id === "lightbox") $("lightbox").hidden = true; });
+document.addEventListener("keydown", e => {
+  if(e.key !== "Escape") return;
+  if(!$("lightbox").hidden){ $("lightbox").hidden = true; return; }
+  if(mode === "placing"){ mode = "browse"; setBanner(null); return; }
+  if(!$("panelView").hidden && document.activeElement.tagName !== "TEXTAREA") $("panelView").querySelector('[data-act="back"],[data-act="cancel"]')?.click();
+});
+
+/* ---------- Start ---------- */
+(async function init(){
+  idb = await openDB();
+  if(!idb) $("storageWarn").hidden = false;
+  memories = await getAll("memories");
+  if(!memories.length && !lsGet("fsm-seeded")){
+    const now = Date.now();
+    for(const [i,e] of EXAMPLES.entries()){
+      const m = {...e, id:"example-"+i, photos:[], example:true, created:now+i, updated:now+i};
+      await put("memories", m); memories.push(m);
+    }
+    lsSet("fsm-seeded","1");
+  }
+  renderAll();
+  fitAll(false);
+})();
+})();
+</script>
+</body>
+</html>
