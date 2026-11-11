@@ -264,7 +264,7 @@ function focusOn(lat, lng, zoom){
   let pt = map.project([lat,lng], zoom);
   if(mqPhone.matches){
     const s = $("sheet").classList;
-    const frac = s.contains("tall") ? .86 : s.contains("mid") ? .62 : .42;
+    const frac = s.contains("tall") ? 1 - 64/window.innerHeight : s.contains("mid") ? .62 : s.contains("low") ? 118/window.innerHeight : .42;
     pt = pt.add([0, window.innerHeight*frac/2]);
   }
   map.flyTo(map.unproject(pt, zoom), zoom, {duration:.6});
@@ -281,7 +281,57 @@ function sheetSize(size){
   app.classList.remove("sheet-tall","sheet-mid","sheet-low");
   if(size){ s.classList.add(size); app.classList.add("sheet-"+size); }
 }
+// Drag the sheet up or down by its handle or title bar; it settles at the nearest stop
+const SNAPS = [["low", () => 118], [null, () => window.innerHeight*.42], ["mid", () => window.innerHeight*.62], ["tall", () => window.innerHeight - 64]];
+let drag = null, justDragged = false;
+$("sheet").addEventListener("pointerdown", e => {
+  if(!mqPhone.matches || e.button > 0) return;
+  if(!e.target.closest(".handle, .head, .ptop") || e.target.closest("button:not(.handle), a, input, select, label, .menu")) return;
+  const s = $("sheet");
+  drag = {id:e.pointerId, y0:e.clientY, h0:s.getBoundingClientRect().height, moved:false, samples:[[e.timeStamp, e.clientY]]};
+});
+window.addEventListener("pointermove", e => {
+  if(!drag || e.pointerId !== drag.id) return;
+  const dy = e.clientY - drag.y0;
+  if(!drag.moved && Math.abs(dy) < 6) return;
+  const s = $("sheet");
+  if(!drag.moved){ drag.moved = true; s.classList.add("dragging"); }
+  const h = Math.max(90, Math.min(window.innerHeight - 48, drag.h0 - dy));
+  s.style.height = h + "px";
+  drag.samples.push([e.timeStamp, e.clientY]); if(drag.samples.length > 5) drag.samples.shift();
+});
+function endDrag(e){
+  if(!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  if(!d.moved) return;
+  const s = $("sheet");
+  const h = s.getBoundingClientRect().height;
+  const [t0, y0] = d.samples[0], [t1, y1] = d.samples[d.samples.length-1];
+  const v = t1 > t0 ? (y1 - y0)/(t1 - t0) : 0;   // px per ms, positive = moving down
+  const stops = SNAPS.map(([k, f]) => [k, f()]);
+  let i = stops.reduce((best, st, j) => Math.abs(st[1]-h) < Math.abs(stops[best][1]-h) ? j : best, 0);
+  if(Math.abs(v) > 0.5){
+    // A flick goes to the next stop in that direction
+    const dir = v < 0 ? 1 : -1;
+    const next = stops.findIndex((st, j) => dir > 0 ? st[1] > h + 4 : false);
+    if(dir > 0) i = next === -1 ? stops.length-1 : next;
+    else { let j = stops.length-1; while(j > 0 && stops[j][1] >= h - 4) j--; i = j; }
+  }
+  // A short but deliberate swipe still moves one stop instead of springing back
+  const startIdx = stops.reduce((best, st, j) => Math.abs(st[1]-d.h0) < Math.abs(stops[best][1]-d.h0) ? j : best, 0);
+  const moved = d.h0 - h;
+  if(i === startIdx && Math.abs(moved) > 40) i = Math.max(0, Math.min(stops.length-1, i + (moved > 0 ? 1 : -1)));
+  s.classList.remove("dragging");
+  s.style.height = "";
+  sheetSize(stops[i][0]);
+  justDragged = true; setTimeout(() => justDragged = false, 50);
+}
+window.addEventListener("pointerup", endDrag);
+window.addEventListener("pointercancel", endDrag);
+mqPhone.addEventListener("change", () => { $("sheet").style.height = ""; });
+
 $("handle").addEventListener("click", () => {
+  if(justDragged) return;
   const s = $("sheet");
   if(!$("panelView").hidden || !$("gateView").hidden){ sheetSize(s.classList.contains("tall") ? "mid" : "tall"); return; }
   sheetSize(s.classList.contains("tall") ? "low" : s.classList.contains("low") ? null : "tall");

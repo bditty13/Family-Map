@@ -155,7 +155,7 @@ textarea.field{min-height:150px;resize:vertical;line-height:1.55}
 .banner{position:absolute;left:50%;top:72px;transform:translateX(-50%);z-index:1000;background:var(--ink);color:var(--bg);border-radius:12px;padding:10px 10px 10px 16px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);font-weight:500;max-width:calc(100% - 28px)}
 .banner button{border:0;border-radius:8px;padding:6px 10px;background:var(--bg);color:var(--ink);font-weight:600}
 .placing #map{cursor:crosshair}
-.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:2000;box-shadow:var(--shadow);font-size:14px;max-width:calc(100% - 32px)}
+.toast{pointer-events:none;position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:2000;box-shadow:var(--shadow);font-size:14px;max-width:calc(100% - 32px)}
 .menu{position:absolute;top:58px;right:20px;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:220px}
 .menu button,.menu label{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:14px}
 .menu button:hover,.menu label:hover{background:var(--bg)}
@@ -203,10 +203,12 @@ textarea.field{min-height:150px;resize:vertical;line-height:1.55}
   .app{display:block;position:relative}
   .mapwrap{position:absolute;inset:0}
   .sheet{position:fixed;left:0;right:0;bottom:0;height:42%;border-right:0;border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.16);transition:height .25s ease;padding-bottom:env(safe-area-inset-bottom,0px)}
-  .sheet.tall{height:86%}
+  .sheet.tall{height:calc(100% - 64px)}
+  .sheet.dragging{transition:none}
   .sheet.mid{height:62%}
   .sheet.low{height:118px}
-  .handle{display:block;border:0;background:transparent;padding:8px 0 0;width:100%}
+  .handle{display:block;border:0;background:transparent;padding:10px 0 6px;width:100%;touch-action:none;cursor:grab}
+  .sheet .head,.sheet .ptop{touch-action:none}
   .handle span{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
   .head{padding-top:8px}
   .fab{bottom:calc(42% + 14px)}
@@ -219,7 +221,7 @@ textarea.field{min-height:150px;resize:vertical;line-height:1.55}
   .leaflet-bottom{bottom:42%;transition:bottom .25s ease}
   .app.sheet-low .leaflet-bottom{bottom:118px}
   .app.sheet-mid .leaflet-bottom{bottom:62%}
-  .app.sheet-tall .leaflet-bottom{bottom:86%}
+  .app.sheet-tall .leaflet-bottom{bottom:calc(100% - 64px)}
   .head,.tools,.foot,.tripbar,.pbody,form.ed,.edfoot,.thumbs{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
 </style>
